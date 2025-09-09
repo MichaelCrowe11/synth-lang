@@ -153,16 +153,55 @@ impl Compiler {
     }
 
     pub async fn compile_source(&mut self, file_id: usize, source: &str) -> Result<CompilationResult> {
+        // Phase 1: Lexical analysis
+        let tokens = self.tokenize(file_id, source)?;
+        
+        // Phase 2: Parsing
+        let ast = self.parse(tokens)?;
+        
+        // Phase 3: Semantic analysis (AST -> HIR)
+        let hir = self.analyze_semantics(ast).await?;
+        
+        // Phase 4: Type checking
+        let typed_hir = self.type_check(hir)?;
+        
+        // Phase 5: Lower to MIR
+        let mir = self.lower_to_mir(typed_hir)?;
+        
+        // Phase 6: Optimization
+        let optimized_mir = self.optimize(mir)?;
+        
+        // Phase 7: Code generation (for now, still use AST for backward compatibility)
+        // In a full implementation, we'd generate from MIR
+        let bytecode = self.generate_code_from_mir(optimized_mir).await?;
+        
+        // Collect diagnostics
+        let diagnostics = self.diagnostics.collect_diagnostics();
+        
+        // Create compilation result
+        let metadata = CompilationMetadata {
+            target: self.target.clone(),
+            features_used: self.get_used_features(),
+            entry_points: vec!["main".to_string()],
+            dependencies: vec![],
+        };
+        
+        Ok(CompilationResult {
+            bytecode,
+            metadata,
+            diagnostics,
+        })
+    }
+    
+    /// Alternative compilation method for quick compilation (bypassing full pipeline)
+    pub async fn compile_source_quick(&mut self, file_id: usize, source: &str) -> Result<CompilationResult> {
         // Lexical analysis
         let tokens = self.tokenize(file_id, source)?;
         
         // Parsing
         let ast = self.parse(tokens)?;
         
-        // For proof-of-concept: Skip semantic analysis, type checking, and MIR
-        // and go directly to code generation
-        
-        // Code generation
+        // Direct code generation (skip semantic analysis for speed)
         let bytecode = self.generate_code(ast).await?;
         
         // Create compilation result
@@ -176,7 +215,7 @@ impl Compiler {
         Ok(CompilationResult {
             bytecode,
             metadata,
-            diagnostics: vec![], // No diagnostics for POC
+            diagnostics: vec![],
         })
     }
 
@@ -246,6 +285,63 @@ impl Compiler {
         }
         
         codegen.generate(&program).await
+    }
+    
+    async fn generate_code_from_mir(&mut self, mir: mir::Program) -> Result<Vec<u8>> {
+        // For now, we'll generate JavaScript from MIR
+        // In a full implementation, this would handle all targets
+        let js_code = self.generate_js_from_mir(mir)?;
+        Ok(js_code.into_bytes())
+    }
+    
+    fn generate_js_from_mir(&self, mir: mir::Program) -> Result<String> {
+        // Simple MIR to JavaScript generation
+        // This is a placeholder - a real implementation would be more sophisticated
+        let mut output = String::new();
+        
+        // Generate functions
+        for func in mir.functions {
+            output.push_str(&format!("function {}() {{\n", func.name));
+            
+            // Generate basic blocks
+            for (_, block) in func.blocks {
+                for inst in block.instructions {
+                    match inst {
+                        mir::Instruction::Assign { dest: _, value: _ } => {
+                            output.push_str("  // Assignment\n");
+                        }
+                        mir::Instruction::Call { .. } => {
+                            output.push_str("  // Function call\n");
+                        }
+                        mir::Instruction::AiOp { .. } => {
+                            output.push_str("  // AI operation\n");
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            
+            output.push_str("}\n\n");
+        }
+        
+        // Add AI runtime if needed
+        if mir.metadata.ai_operations_used {
+            output.push_str(r#"
+// SYNTH AI Runtime
+const synthAI = {
+    async generate(prompt) {
+        console.log('AI Generate:', prompt);
+        return `AI Response: ${prompt}`;
+    },
+    async embed(text) {
+        console.log('Embed:', text);
+        return new Array(768).fill(0).map(() => Math.random());
+    }
+};
+"#);
+        }
+        
+        Ok(output)
     }
 
     fn get_used_features(&self) -> Vec<String> {

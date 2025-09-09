@@ -287,6 +287,28 @@ impl DiagnosticEngine {
 
         Ok(codespan_diagnostic)
     }
+    
+    /// Report a diagnostic message
+    pub fn report(&mut self, diagnostic: Diagnostic) {
+        self.add_diagnostic(diagnostic);
+    }
+    
+    /// Collect all diagnostics for compilation result
+    pub fn collect_diagnostics(&mut self) -> Vec<crate::Diagnostic> {
+        self.diagnostics.iter().map(|d| crate::Diagnostic {
+            level: match d.level {
+                DiagnosticLevel::Error => crate::DiagnosticLevel::Error,
+                DiagnosticLevel::Warning => crate::DiagnosticLevel::Warning,
+                DiagnosticLevel::Info => crate::DiagnosticLevel::Info,
+                DiagnosticLevel::Help => crate::DiagnosticLevel::Hint,
+            },
+            message: d.message.clone(),
+            location: d.span.map(|span| crate::SourceLocation {
+                file_id: d.file_id,
+                span: span.start..span.end,
+            }),
+        }).collect()
+    }
 }
 
 /// Builder pattern for constructing diagnostics
